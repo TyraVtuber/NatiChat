@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multichat · Twitch + Kick</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0612; --bg2:#100819; --panel:#160c27; --panel2:#1d1133; --line:#2e1c50;
+  --purple:#8b5cf6; --purple-deep:#4c1d95; --pink:#ff2ea6; --pink-soft:#ff86cf;
+  --text:#ece6f7; --muted:#9a8bb8; --tw:#a970ff; --kick:#53fc18;
+  --ok:#5dffb1; --warn:#ffc857; --err:#ff4d6d;
+  --glow:0 0 6px rgba(255,46,166,.65),0 0 20px rgba(255,46,166,.3);
+  --font:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --display:'Orbitron','Segoe UI',system-ui,sans-serif;
+  --fs:clamp(13px,1.6vw,15.5px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font);color:var(--text);font-size:var(--fs);
+  background:
+    radial-gradient(900px 500px at 85% -10%,rgba(139,92,246,.22),transparent 60%),
+    radial-gradient(700px 500px at -10% 110%,rgba(255,46,166,.13),transparent 60%),
+    var(--bg);
+  overflow:hidden;
+}
+.app{position:relative;height:100dvh;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* ---------- Header ---------- */
+header{display:flex;align-items:center;gap:10px;padding:10px 12px;flex-wrap:wrap;
+  background:linear-gradient(180deg,rgba(28,15,50,.95),rgba(16,8,28,.85));
+  border-bottom:1px solid var(--line);position:relative;z-index:2}
+header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--pink),var(--purple),transparent);opacity:.8}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.brand h1{font-family:var(--display);font-weight:800;font-size:clamp(14px,2.2vw,18px);letter-spacing:.14em}
+.brand h1 b{color:var(--pink);text-shadow:var(--glow)}
+.brand small{color:var(--muted);font-size:.72em;letter-spacing:.08em;text-transform:uppercase}
+.pills{display:flex;gap:6px}
+.pill,.iconbtn{
+  display:inline-flex;align-items:center;gap:7px;cursor:pointer;color:var(--text);
+  background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;font:600 .82em var(--font);transition:.18s;
+}
+.pill:hover,.iconbtn:hover{border-color:var(--purple);box-shadow:0 0 12px rgba(139,92,246,.35)}
+.pill.off{opacity:.42;filter:saturate(.3)}
+.dot{width:8px;height:8px;border-radius:50%;background:#6b5c86;box-shadow:0 0 0 2px rgba(255,255,255,.04)}
+[data-s=ok] .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+[data-s=connecting] .dot{background:var(--warn);animation:pulse 1s infinite}
+[data-s=error] .dot{background:var(--err);box-shadow:0 0 8px var(--err)}
+@keyframes pulse{50%{opacity:.35}}
+.iconbtn{border-radius:10px;padding:6px 10px}
+.iconbtn.active{border-color:var(--pink);color:var(--pink-soft);box-shadow:var(--glow)}
+
+/* ---------- Feed ---------- */
+main{flex:1;position:relative;min-height:0}
+#feed{position:absolute;inset:0;overflow-y:auto;padding:10px 12px 14px;display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:thin;scrollbar-color:var(--purple-deep) transparent}
+#feed::-webkit-scrollbar{width:8px}
+#feed::-webkit-scrollbar-thumb{background:var(--purple-deep);border-radius:8px}
+.msg{padding:5px 9px 5px 10px;border-left:2px solid transparent;border-radius:0 8px 8px 0;line-height:1.45;
+  word-break:break-word;overflow-wrap:anywhere;contain:content}
+.msg:hover{background:rgba(139,92,246,.09)}
+.msg.twitch{border-left-color:var(--tw)}
+.msg.kick{border-left-color:var(--kick)}
+.msg.self{background:rgba(255,46,166,.07)}
+.msg.hidden{display:none}
+.msg.sys{border-left-color:var(--warn);color:var(--warn);font-size:.86em;background:rgba(255,200,87,.06)}
+.msg.sys.err{border-left-color:var(--err);color:#ff9db0;background:rgba(255,77,109,.07)}
+.msg.sys.info{border-left-color:var(--purple);color:var(--muted);background:rgba(139,92,246,.06)}
+.tag{display:inline-block;font:700 .62em var(--display);letter-spacing:.06em;padding:2px 5px;margin-right:6px;border-radius:4px;
+  vertical-align:.14em;border:1px solid;background:rgba(0,0,0,.25)}
+.tag.twitch{color:var(--tw);border-color:rgba(169,112,255,.55)}
+.tag.kick{color:var(--kick);border-color:rgba(83,252,24,.45)}
+.user{font-weight:600}
+.colon{color:var(--muted);margin:0 5px 0 1px}
+.emote{height:1.7em;vertical-align:middle;margin:-2px 1px}
+.action .txt{font-style:italic}
+#jump{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:none;cursor:pointer;
+  background:var(--panel2);color:var(--pink-soft);border:1px solid var(--pink);border-radius:999px;
+  padding:7px 16px;font:600 .82em var(--font);box-shadow:var(--glow)}
+#jump.show{display:block}
+
+/* ---------- Vista original (iframes) ---------- */
+#frames{position:absolute;inset:0;display:none;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;padding:8px}
+#frames.show{display:grid}
+#frames iframe{width:100%;height:100%;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+
+/* ---------- Composer ---------- */
+.composer{padding:10px 12px 12px;background:linear-gradient(0deg,rgba(22,12,39,.98),rgba(16,8,28,.9));
+  border-top:1px solid var(--line);position:relative}
+.composer::before{content:"";position:absolute;left:0;right:0;top:-1px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--purple),var(--pink),transparent);opacity:.7}
+.targets{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
+.targets span.lbl{color:var(--muted);font-size:.74em;text-transform:uppercase;letter-spacing:.1em;margin-right:2px}
+.chip{cursor:pointer;user-select:none;font:600 .78em var(--font);padding:5px 11px;border-radius:8px;
+  background:transparent;color:var(--muted);border:1px solid var(--line);transition:.15s;display:inline-flex;gap:6px;align-items:center}
+.chip.on.twitch{color:#fff;background:rgba(169,112,255,.22);border-color:var(--tw);box-shadow:0 0 12px rgba(169,112,255,.35)}
+.chip.on.kick{color:#fff;background:rgba(83,252,24,.12);border-color:rgba(83,252,24,.6);box-shadow:0 0 12px rgba(83,252,24,.2)}
+.chip .who{font-weight:400;opacity:.75}
+.chip.warn::after{content:"•";color:var(--warn)}
+.row{display:flex;gap:8px}
+#msg{flex:1;min-width:0;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:10px;
+  padding:11px 14px;font:inherit;outline:none;transition:.15s}
+#msg:focus{border-color:var(--pink);box-shadow:0 0 0 1px var(--pink),var(--glow)}
+#msg::placeholder{color:#6d5e8a}
+#send{cursor:pointer;border:0;color:#fff;font:700 .84em var(--display);letter-spacing:.12em;padding:0 20px;
+  background:linear-gradient(135deg,var(--pink),var(--purple));
+  clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  transition:.15s}
+#send:hover{filter:brightness(1.15)}
+#send:disabled{opacity:.5;cursor:wait}
+
+/* ---------- Ajustes ---------- */
+dialog{margin:auto;width:min(560px,94vw);max-height:92dvh;overflow:auto;scrollbar-width:none;-ms-overflow-style:none;background:var(--panel);color:var(--text);
+  border:1px solid var(--purple);border-radius:16px;padding:0;box-shadow:0 0 24px rgba(139,92,246,.3)}
+dialog::backdrop{background:rgba(6,3,12,.85)}
+dialog::-webkit-scrollbar{display:none}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dlg-h h2{font:800 .95em var(--display);letter-spacing:.12em}
+.dlg-h h2 b{color:var(--pink)}
+.dlg-b{padding:14px 18px 6px;display:grid;gap:18px}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:12px 14px 14px;display:grid;gap:9px}
+legend{padding:0 8px;font:700 .8em var(--display);letter-spacing:.1em}
+legend.tw{color:var(--tw)} legend.kk{color:var(--kick)}
+label{display:grid;gap:4px;font-size:.78em;color:var(--muted)}
+input[type=text],input[type=password]{background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:8px;
+  padding:9px 11px;font:inherit;font-size:1.05em;outline:none;width:100%}
+input[type=text]:focus,input[type=password]:focus{border-color:var(--purple);box-shadow:0 0 0 1px var(--purple)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:8px 14px;font:600 .82em var(--font);transition:.15s}
+.btn:hover{border-color:var(--purple)}
+.btn.pri{border-color:var(--pink);color:#fff;background:linear-gradient(135deg,rgba(255,46,166,.35),rgba(139,92,246,.3));box-shadow:var(--glow)}
+.btn.danger:hover{border-color:var(--err);color:#ff9db0}
+.hint{font-size:.74em;color:var(--muted);line-height:1.5}
+.hint code{background:var(--bg2);padding:1px 5px;border-radius:4px;color:var(--pink-soft)}
+.acct{font-size:.8em;color:var(--ok)}
+.dlg-f{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 16px}
+details summary{cursor:pointer;color:var(--muted);font-size:.78em}
+
+.note{display:none;font-size:.76em;line-height:1.45;padding:7px 10px;border-radius:8px}
+.note.show{display:block}
+.note.err{color:#ff9db0;background:rgba(255,77,109,.09);border:1px solid rgba(255,77,109,.35)}
+.note.ok{color:var(--ok);background:rgba(93,255,177,.07);border:1px solid rgba(93,255,177,.3)}
+.note.info{color:var(--muted);background:rgba(139,92,246,.08);border:1px solid var(--line)}
+.redir{display:flex;gap:8px;align-items:center}
+.redir code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.8em;color:var(--pink-soft)}
+
+/* ---------- Adaptación ---------- */
+@media (max-width:520px){
+  header{padding:8px 10px;gap:7px}.brand small{display:none}
+  .pill span{display:none}.pill{padding:7px 9px}
+  #send{padding:0 14px}.chip .who{display:none}
+}
+@media (max-height:380px){header{display:none}.targets{display:none}.composer{padding:8px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><h1>MULTI<b>CHAT</b></h1><small id="chNames"></small></div>
+    <div class="pills">
+      <button class="pill" id="pillTwitch" data-s="idle" title="Mostrar/ocultar mensajes de Twitch"><i class="dot"></i><span>Twitch</span></button>
+      <button class="pill" id="pillKick" data-s="idle" title="Mostrar/ocultar mensajes de Kick"><i class="dot"></i><span>Kick</span></button>
+    </div>
+    <button class="iconbtn" id="viewBtn" title="Alternar vista unificada / chats originales">⇄ Original</button>
+    <button class="iconbtn" id="setBtn" title="Ajustes y cuentas">⚙ Ajustes</button>
+  </header>
+
+  <main>
+    <div id="feed" aria-live="polite"></div>
+    <button id="jump">↓ Mensajes nuevos</button>
+    <div id="frames"></div>
+  </main>
+
+  <div class="composer">
+    <div class="targets">
+      <span class="lbl">Enviar a</span>
+      <button class="chip twitch on" id="tgTwitch">Twitch <span class="who"></span></button>
+      <button class="chip kick on" id="tgKick">Kick <span class="who"></span></button>
+    </div>
+    <div class="row">
+      <input id="msg" type="text" maxlength="500" autocomplete="off" placeholder="Escribe un mensaje para ambos chats…">
+      <button id="send">ENVIAR</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-h"><h2>AJUSTES · <b>CUENTAS</b></h2><button class="iconbtn" id="dlgClose">✕</button></div>
+  <div class="dlg-b">
+    <fieldset>
+      <legend>URL DE REDIRECCIÓN</legend>
+      <div class="redir"><code id="redirUrl"></code><button class="btn" id="copyRedir">Copiar</button></div>
+      <div class="hint">Regístrala tal cual en la app de Twitch y en la de Kick.</div>
+      <div class="note" id="fileNote"></div>
+    </fieldset>
+
+
+    <fieldset>
+      <legend class="tw">TWITCH</legend>
+      <label>Canal a leer<input type="text" id="twChannel" placeholder="natim30w"></label>
+      <div class="acct" id="twAcct"></div>
+      <div class="note" id="twNote"></div>
+      <label>Client ID de tu app de Twitch (para "Conectar")<input type="text" id="twClient" placeholder="Client ID de dev.twitch.tv/console"></label>
+      <div class="btns">
+        <button class="btn pri" id="twConnect">Conectar con Twitch</button>
+        <button class="btn danger" id="twLogout">Desconectar</button>
+      </div>
+      <details>
+        <summary>O pega un token manualmente</summary>
+        <label style="margin-top:8px">Token OAuth (chat:read chat:edit)<input type="password" id="twToken" placeholder="oauth:xxxxxxxx"></label>
+        <div class="btns" style="margin-top:8px"><button class="btn" id="twTokenSave">Validar token</button></div>
+      </details>
+      <div class="hint">Sin cuenta conectada, el chat se lee de forma anónima. Para el botón "Conectar" registra una app en
+        <code>dev.twitch.tv/console</code> con esta página como URL de redirección (debe abrirse por <code>http(s)://</code>, no como archivo).</div>
+    </fieldset>
+
+    <fieldset>
+      <legend class="kk">KICK</legend>
+      <label>Canal a leer<input type="text" id="kkChannel" placeholder="natime30w"></label>
+      <label>ID del chatroom (se intenta obtener solo)<input type="text" id="kkRoom" placeholder="p. ej. 12345678"></label>
+      <div class="acct" id="kkAcct"></div>
+      <div class="note" id="kkNote"></div>
+      <label>Client ID de tu app de Kick<input type="text" id="kkClient" placeholder="Client ID de kick.com → Ajustes → Desarrollador"></label>
+      <label>Client Secret<input type="password" id="kkSecret" placeholder="Client Secret"></label>
+      <div class="btns">
+        <button class="btn pri" id="kkConnect">Conectar con Kick</button>
+        <button class="btn danger" id="kkLogout">Desconectar</button>
+      </div>
+      <details>
+        <summary>O pega un access token manualmente</summary>
+        <label style="margin-top:8px">Access token (scope chat:write)<input type="password" id="kkToken" placeholder="Bearer token"></label>
+        <label style="margin-top:8px">ID de usuario del streamer (opcional, se busca solo)<input type="text" id="kkBroadcaster" placeholder="broadcaster_user_id"></label>
+        <div class="btns" style="margin-top:8px"><button class="btn" id="kkTokenSave">Guardar token</button></div>
+      </details>
+      <div class="hint">Si no carga el chat de Kick, abre <code>kick.com/api/v2/channels/natime30w</code> en el navegador, busca
+        <code>"chatroom":{"id":…}</code> y pega ese número arriba.</div>
+    </fieldset>
+  </div>
+  <div class="dlg-f">
+    <button class="btn" id="dlgCancel">Cancelar</button>
+    <button class="btn pri" id="dlgSave">Guardar y reconectar</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const MAX_MSGS = 150;
+const DEF = {
+  twitchChannel:'natim30w', kickChannel:'natime30w',
+  twClient:'', twToken:'', twLogin:'',
+  kickChatroom:'', kickClient:'', kickSecret:'', kickToken:'', kickBroadcaster:'', kickLogin:''
+};
+let cfg = { ...DEF };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('multichat.cfg') || '{}')); } catch {}
+const save = () => { try { localStorage.setItem('multichat.cfg', JSON.stringify(cfg)); } catch {} };
+const redirectUri = () => location.origin + location.pathname;
+const canRedirect = () => location.protocol === 'https:' || location.hostname === 'localhost';
+const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
+
+/* ---------- Feed ---------- */
+const feed = $('#feed'), jump = $('#jump');
+const filters = { twitch:true, kick:true };
+let stick = true;
+feed.addEventListener('scroll', () => {
+  stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  jump.classList.toggle('show', !stick);
+});
+jump.onclick = () => { stick = true; feed.scrollTop = feed.scrollHeight; jump.classList.remove('show'); };
+
+function fixColor(c, name){
+  const m = /^#?([0-9a-f]{6})$/i.exec(c || '');
+  if(!m){ let h=0; for(const ch of name) h=(h*31+ch.charCodeAt(0))>>>0; return `hsl(${h%360} 78% 68%)`; }
+  const n = parseInt(m[1],16); let r=n>>16, g=(n>>8)&255, b=n&255;
+  const l = .299*r+.587*g+.114*b;
+  if(l < 130){ const f = Math.min(.85,(130-l)/130*.8+.2); r=Math.round(r+(255-r)*f); g=Math.round(g+(255-g)*f); b=Math.round(b+(255-b)*f); }
+  return `rgb(${r},${g},${b})`;
+}
+function emoteImg(src, alt){
+  const i = document.createElement('img'); i.className='emote'; i.src=src; i.alt=alt; i.title=alt; i.loading='lazy'; i.decoding='async'; return i;
+}
+let pending = [], scheduled = false;
+function flush(){
+  scheduled = false;
+  const frag = document.createDocumentFragment();
+  pending.forEach(el => frag.appendChild(el)); pending = [];
+  feed.appendChild(frag);
+  let extra = feed.children.length - MAX_MSGS;
+  while(extra-- > 0) feed.firstChild.remove();
+  if(stick) feed.scrollTop = feed.scrollHeight;
+}
+function push(el){
+  pending.push(el); if(pending.length > MAX_MSGS) pending.shift();
+  if(!scheduled){ scheduled = true; requestAnimationFrame(flush); }
+}
+function addMsg({platform, user, color, parts, self=false, action=false}){
+  const el = document.createElement('div');
+  el.className = `msg ${platform}${self?' self':''}${action?' action':''}${filters[platform]?'':' hidden'}`;
+  const tag = document.createElement('span'); tag.className=`tag ${platform}`; tag.textContent = platform==='twitch'?'TW':'KK';
+  const u = document.createElement('span'); u.className='user'; u.textContent=user; u.style.color=fixColor(color,user);
+  const c = document.createElement('span'); c.className='colon'; c.textContent = action ? '' : ':';
+  const t = document.createElement('span'); t.className='txt';
+  parts.forEach(p => t.append(typeof p==='string' ? document.createTextNode(p) : p));
+  el.append(tag,u,c,t); push(el);
+}
+function sys(text, kind='warn'){
+  const el = document.createElement('div'); el.className=`msg sys ${kind==='warn'?'':kind}`; el.textContent=text; push(el);
+}
+
+function note(id, text, kind='err'){
+  const el = $('#'+id); if(!el) return;
+  el.textContent = text || ''; el.className = 'note' + (text ? ' show '+kind : '');
+}
+
+/* ---------- Estado / UI ---------- */
+function setStatus(p, s, title){
+  const el = $(p==='twitch' ? '#pillTwitch' : '#pillKick');
+  el.dataset.s = s; el.title = (title || '') + ' · clic para mostrar/ocultar';
+}
+function refreshUI(){
+  $('#chNames').textContent = `${cfg.twitchChannel} · ${cfg.kickChannel}`;
+  const tw = $('#tgTwitch'), kk = $('#tgKick');
+  tw.querySelector('.who').textContent = cfg.twLogin ? '· '+cfg.twLogin : '· sin conectar';
+  kk.querySelector('.who').textContent = cfg.kickToken ? '· '+(cfg.kickLogin||'conectado') : '· sin conectar';
+  tw.classList.toggle('warn', !cfg.twToken); kk.classList.toggle('warn', !cfg.kickToken);
+  $('#twAcct').textContent = cfg.twLogin ? `✓ Conectado como ${cfg.twLogin}` : '';
+  $('#kkAcct').textContent = cfg.kickToken ? `✓ Kick conectado${cfg.kickLogin?' como '+cfg.kickLogin:''}` : '';
+}
+['twitch','kick'].forEach(p => {
+  $(p==='twitch' ? '#pillTwitch' : '#pillKick').onclick = e => {
+    filters[p] = !filters[p]; e.currentTarget.classList.toggle('off', !filters[p]);
+    feed.querySelectorAll('.msg.'+p).forEach(m => m.classList.toggle('hidden', !filters[p]));
+    if(stick) feed.scrollTop = feed.scrollHeight;
+  };
+});
+const targets = { twitch:true, kick:true };
+[['twitch','#tgTwitch'],['kick','#tgKick']].forEach(([p,id]) => {
+  $(id).onclick = e => { targets[p] = !targets[p]; e.currentTarget.classList.toggle('on', targets[p]); };
+});
+
+/* ---------- Twitch (IRC por WebSocket) ---------- */
+let tws = null, twTimer = null, twMyColor = null, twMyName = null;
+function parseTags(s){
+  const o = {};
+  s.split(';').forEach(kv => { const i = kv.indexOf('='); o[kv.slice(0,i)] = kv.slice(i+1).replace(/\\s/g,' ').replace(/\\:/g,';').replace(/\\\\/g,'\\'); });
+  return o;
+}
+function twParts(text, emotes){
+  if(!emotes) return [text];
+  const chars = Array.from(text), ranges = [];
+  emotes.split('/').forEach(e => {
+    const [id,pos] = e.split(':'); if(!pos) return;
+    pos.split(',').forEach(p => { const [a,b] = p.split('-').map(Number); ranges.push({a,b,id}); });
+  });
+  ranges.sort((x,y) => x.a-y.a);
+  const out = []; let i = 0;
+  for(const r of ranges){
+    if(r.a < i) continue;
+    if(r.a > i) out.push(chars.slice(i,r.a).join(''));
+    out.push(emoteImg(`https://static-cdn.jtvnw.net/emoticons/v2/${r.id}/default/dark/1.0`, chars.slice(r.a,r.b+1).join('')));
+    i = r.b+1;
+  }
+  if(i < chars.length) out.push(chars.slice(i).join(''));
+  return out;
+}
+function handleIrc(line){
+  if(line.startsWith('PING')){ tws.send('PONG :tmi.twitch.tv'); return; }
+  let tags = {}, rest = line, prefix = '';
+  if(rest[0]==='@'){ const i = rest.indexOf(' '); tags = parseTags(rest.slice(1,i)); rest = rest.slice(i+1); }
+  if(rest[0]===':'){ const i = rest.indexOf(' '); prefix = rest.slice(1,i); rest = rest.slice(i+1); }
+  const sp = rest.indexOf(' ');
+  const cmd = sp<0 ? rest : rest.slice(0,sp), params = sp<0 ? '' : rest.slice(sp+1);
+  switch(cmd){
+    case 'PRIVMSG': {
+      const ti = params.indexOf(' :'); let text = params.slice(ti+2), action = false;
+      const m = /^\x01ACTION (.*)\x01$/.exec(text); if(m){ text = m[1]; action = true; }
+      const user = tags['display-name'] || prefix.split('!')[0];
+      addMsg({platform:'twitch', user, color:tags.color, parts:twParts(text, tags.emotes), action,
+        self: cfg.twLogin && user.toLowerCase()===cfg.twLogin.toLowerCase()});
+      break;
+    }
+    case 'GLOBALUSERSTATE': case 'USERSTATE':
+      if(tags.color) twMyColor = tags.color; if(tags['display-name']) twMyName = tags['display-name']; break;
+    case '376': case 'ROOMSTATE': setStatus('twitch','ok', cfg.twLogin ? 'Twitch conectado como '+cfg.twLogin : 'Twitch conectado (solo lectura)'); break;
+    case 'NOTICE':
+      if(/authentication failed|Improperly formatted auth/i.test(params)){
+        sys('Twitch rechazó el token. Vuelve a conectar la cuenta.','err');
+        cfg.twToken=''; cfg.twLogin=''; save(); refreshUI();
+      } else sys('Twitch: '+params.slice(params.indexOf(':')+1), 'info');
+      break;
+    case 'RECONNECT': tws.close(); break;
+  }
+}
+function connectTwitch(){
+  clearTimeout(twTimer);
+  if(tws){ tws.onclose = null; try{ tws.close(); }catch{} }
+  const ch = cfg.twitchChannel.trim().toLowerCase().replace(/^#/,'');
+  if(!ch){ setStatus('twitch','idle','Sin canal'); return; }
+  setStatus('twitch','connecting','Conectando a Twitch…');
+  tws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+  tws.onopen = () => {
+    tws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    if(cfg.twToken && cfg.twLogin){ tws.send('PASS oauth:'+cfg.twToken); tws.send('NICK '+cfg.twLogin.toLowerCase()); }
+    else { tws.send('PASS SCHMOOPIIE'); tws.send('NICK justinfan'+(1000+Math.floor(Math.random()*80000))); }
+    tws.send('JOIN #'+ch);
+  };
+  tws.onmessage = e => String(e.data).split('\r\n').filter(Boolean).forEach(handleIrc);
+  tws.onclose = () => { setStatus('twitch','error','Twitch desconectado, reintentando…'); twTimer = setTimeout(connectTwitch, 4000); };
+  tws.onerror = () => {};
+}
+async function twSend(text){
+  if(!cfg.twToken || !cfg.twLogin) throw new Error('Twitch: cuenta no conectada');
+  if(!tws || tws.readyState !== 1) throw new Error('Twitch: sin conexión');
+  tws.send(`PRIVMSG #${cfg.twitchChannel.trim().toLowerCase()} :${text}`);
+  addMsg({platform:'twitch', user: twMyName || cfg.twLogin, color: twMyColor, parts:[text], self:true}); // Twitch no devuelve el eco
+}
+async function twValidate(token){
+  const r = await fetch('https://id.twitch.tv/oauth2/validate', { headers:{ Authorization:'OAuth '+token }});
+  if(!r.ok) throw new Error('Token no válido');
+  return r.json();
+}
+function twStartLogin(){
+  if(!cfg.twClient){ note('twNote','Falta el Client ID. Créalo en dev.twitch.tv/console, pulsa Administrar y copia el "ID de cliente".'); return; }
+  if(!canRedirect()){ note('twNote','Abre esta página desde https:// o desde http://localhost (ahora está abierta como archivo). Mientras tanto usa el token manual.'); return; }
+  note('twNote','Redirigiendo a Twitch…','info');
+  const state = rand(); sessionStorage.setItem('mc.tw.state', state);
+  location.href = 'https://id.twitch.tv/oauth2/authorize?' + new URLSearchParams({
+    client_id: cfg.twClient, redirect_uri: redirectUri(), response_type:'token',
+    scope:'chat:read chat:edit', state, force_verify:'true' });
+}
+
+/* ---------- Kick (Pusher no oficial para leer, API oficial para escribir) ---------- */
+let kws = null, kTimer = null;
+function kickParts(text){
+  const out = []; const re = /\[emote:(\d+):([^\]]+)\]/g; let i = 0, m;
+  while((m = re.exec(text))){
+    if(m.index > i) out.push(text.slice(i,m.index));
+    out.push(emoteImg(`https://files.kick.com/emotes/${m[1]}/fullsize`, m[2])); i = re.lastIndex;
+  }
+  if(i < text.length) out.push(text.slice(i));
+  return out;
+}
+async function resolveKickRoom(){
+  if(cfg.kickChatroom) return cfg.kickChatroom;
+  try{
+    const r = await fetch('https://kick.com/api/v2/channels/'+encodeURIComponent(cfg.kickChannel.trim().toLowerCase()));
+    const j = await r.json();
+    if(j && j.chatroom && j.chatroom.id){ cfg.kickChatroom = String(j.chatroom.id); save(); return cfg.kickChatroom; }
+  }catch{}
+  return null;
+}
+async function connectKick(){
+  clearTimeout(kTimer);
+  if(kws){ kws.onclose = null; try{ kws.close(); }catch{} }
+  if(!cfg.kickChannel.trim()){ setStatus('kick','idle','Sin canal'); return; }
+  setStatus('kick','connecting','Conectando a Kick…');
+  const room = await resolveKickRoom();
+  if(!room){
+    setStatus('kick','error','Falta el ID del chatroom de Kick');
+    sys('No pude obtener el ID del chatroom de Kick automáticamente. Ábrelo en Ajustes → Kick (hay instrucciones).','err');
+    return;
+  }
+  kws = new WebSocket('wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false');
+  kws.onmessage = e => {
+    let m; try{ m = JSON.parse(e.data); }catch{ return; }
+    switch(m.event){
+      case 'pusher:connection_established':
+        kws.send(JSON.stringify({event:'pusher:subscribe', data:{auth:'', channel:`chatrooms.${room}.v2`}})); break;
+      case 'pusher_internal:subscription_succeeded': setStatus('kick','ok','Kick conectado'); break;
+      case 'pusher:ping': kws.send(JSON.stringify({event:'pusher:pong', data:{}})); break;
+      case 'App\\Events\\ChatMessageEvent': {
+        let d; try{ d = JSON.parse(m.data); }catch{ return; }
+        const s = d.sender || {}, name = s.username || 'kick';
+        addMsg({platform:'kick', user:name, color:(s.identity||{}).color, parts:kickParts(d.content||''),
+          self: cfg.kickLogin && name.toLowerCase()===cfg.kickLogin.toLowerCase()});
+      }
+    }
+  };
+  kws.onclose = () => { setStatus('kick','error','Kick desconectado, reintentando…'); kTimer = setTimeout(connectKick, 4000); };
+  kws.onerror = () => {};
+}
+async function kickResolveBroadcaster(){
+  if(cfg.kickBroadcaster) return cfg.kickBroadcaster;
+  const r = await fetch('https://api.kick.com/public/v1/channels?slug='+encodeURIComponent(cfg.kickChannel.trim().toLowerCase()),
+    { headers:{ Authorization:'Bearer '+cfg.kickToken }});
+  if(!r.ok) throw new Error('No pude obtener el ID del streamer en Kick ('+r.status+')');
+  const j = await r.json(); const id = j && j.data && j.data[0] && j.data[0].broadcaster_user_id;
+  if(!id) throw new Error('Kick: no encontré el canal');
+  cfg.kickBroadcaster = String(id); save(); return cfg.kickBroadcaster;
+}
+async function kickSend(text){
+  if(!cfg.kickToken) throw new Error('Kick: cuenta no conectada');
+  const id = await kickResolveBroadcaster();
+  const r = await fetch('https://api.kick.com/public/v1/chat', {
+    method:'POST', headers:{ Authorization:'Bearer '+cfg.kickToken, 'Content-Type':'application/json' },
+    body: JSON.stringify({ broadcaster_user_id: Number(id), content: text, type:'user' })
+  });
+  if(r.status === 401){ cfg.kickToken=''; save(); refreshUI(); throw new Error('Kick: el token caducó, vuelve a conectar'); }
+  if(!r.ok) throw new Error('Kick: error '+r.status);
+}
+async function kickFetchMe(){
+  try{
+    const r = await fetch('https://api.kick.com/public/v1/users', { headers:{ Authorization:'Bearer '+cfg.kickToken }});
+    const j = await r.json(); if(j && j.data && j.data[0]) cfg.kickLogin = j.data[0].name || '';
+  }catch{}
+}
+/* OAuth 2.1 + PKCE de Kick */
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+async function kickStartLogin(){
+  if(!cfg.kickClient || !cfg.kickSecret){ note('kkNote','Faltan el Client ID y el Client Secret de tu app de Kick.'); return; }
+  if(!canRedirect()){ note('kkNote','Abre esta página desde https:// o desde http://localhost (ahora está abierta como archivo). Mientras tanto usa el token manual.'); return; }
+  note('kkNote','Redirigiendo a Kick…','info');
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const state = rand(); sessionStorage.setItem('mc.kk.state', state); sessionStorage.setItem('mc.kk.verifier', verifier);
+  location.href = 'https://id.kick.com/oauth/authorize?' + new URLSearchParams({
+    response_type:'code', client_id:cfg.kickClient, redirect_uri:redirectUri(),
+    scope:'user:read channel:read chat:write', code_challenge:challenge, code_challenge_method:'S256', state });
+}
+async function handleOAuthReturn(){
+  const hash = new URLSearchParams(location.hash.slice(1)), qs = new URLSearchParams(location.search);
+  if(hash.get('access_token')){
+    const ok = hash.get('state') === sessionStorage.getItem('mc.tw.state');
+    const token = hash.get('access_token'); history.replaceState(null,'',location.pathname);
+    if(!ok){ sys('Twitch: la respuesta de inicio de sesión no coincide (state). Inténtalo otra vez.','err'); return; }
+    try{ const v = await twValidate(token); cfg.twToken = token; cfg.twLogin = v.login; save(); sys('Twitch conectado como '+v.login,'info'); }
+    catch(e){ sys('Twitch: '+e.message,'err'); }
+  } else if(qs.get('code') && sessionStorage.getItem('mc.kk.verifier')){
+    const code = qs.get('code'), ok = qs.get('state') === sessionStorage.getItem('mc.kk.state');
+    const verifier = sessionStorage.getItem('mc.kk.verifier'); history.replaceState(null,'',location.pathname);
+    if(!ok){ sys('Kick: la respuesta de inicio de sesión no coincide (state). Inténtalo otra vez.','err'); return; }
+    try{
+      const r = await fetch('https://id.kick.com/oauth/token', { method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({ grant_type:'authorization_code', client_id:cfg.kickClient, client_secret:cfg.kickSecret,
+          redirect_uri:redirectUri(), code_verifier:verifier, code }) });
+      const j = await r.json(); if(!j.access_token) throw new Error('sin token en la respuesta');
+      cfg.kickToken = j.access_token; await kickFetchMe(); save(); sys('Kick conectado'+(cfg.kickLogin?' como '+cfg.kickLogin:''),'info');
+    }catch(e){ sys('Kick: no se pudo completar el inicio de sesión ('+(e instanceof TypeError ? 'el navegador bloqueó la conexión con Kick' : e.message)+'). Usa el token manual en Ajustes.','err'); }
+  }
+  refreshUI();
+}
+
+/* ---------- Envío a ambos ---------- */
+const input = $('#msg'), sendBtn = $('#send');
+async function sendAll(){
+  const text = input.value.trim(); if(!text) return;
+  const jobs = [];
+  if(targets.twitch) jobs.push(['Twitch', twSend(text)]);
+  if(targets.kick) jobs.push(['Kick', kickSend(text)]);
+  if(!jobs.length){ sys('Selecciona al menos un destino.','err'); return; }
+  sendBtn.disabled = true;
+  const res = await Promise.allSettled(jobs.map(j => j[1]));
+  let okAny = false;
+  res.forEach((r,i) => { if(r.status==='fulfilled') okAny = true; else sys(r.reason.message.startsWith(jobs[i][0]) ? r.reason.message : `${jobs[i][0]}: ${r.reason.message}`, 'err'); });
+  if(okAny){ input.value=''; stick = true; }
+  sendBtn.disabled = false; input.focus();
+}
+sendBtn.onclick = sendAll;
+input.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAll(); }});
+
+/* ---------- Vista original (iframes) ---------- */
+let framesOn = false;
+$('#viewBtn').onclick = e => {
+  framesOn = !framesOn; e.currentTarget.classList.toggle('active', framesOn);
+  e.currentTarget.textContent = framesOn ? '⇄ Unificado' : '⇄ Original';
+  const box = $('#frames'); box.classList.toggle('show', framesOn); feed.style.display = framesOn ? 'none' : ''; if(!framesOn) jump.classList.remove('show');
+  if(framesOn && !box.children.length){
+    const parent = location.hostname || 'localhost';
+    const tw = document.createElement('iframe'); tw.title='Chat de Twitch';
+    tw.src = `https://www.twitch.tv/embed/${encodeURIComponent(cfg.twitchChannel)}/chat?parent=${parent}&darkpopout`;
+    const kk = document.createElement('iframe'); kk.title='Chat de Kick';
+    kk.src = `https://kick.com/popout/${encodeURIComponent(cfg.kickChannel)}/chat`;
+    box.append(tw,kk);
+  }
+};
+
+/* ---------- Ajustes ---------- */
+const dlg = $('#dlg');
+function fillForm(){
+  $('#twChannel').value = cfg.twitchChannel; $('#twClient').value = cfg.twClient; $('#twToken').value = '';
+  $('#kkChannel').value = cfg.kickChannel; $('#kkRoom').value = cfg.kickChatroom; $('#kkClient').value = cfg.kickClient;
+  $('#kkSecret').value = cfg.kickSecret; $('#kkToken').value = ''; $('#kkBroadcaster').value = cfg.kickBroadcaster;
+}
+$('#setBtn').onclick = () => {
+  fillForm(); refreshUI();
+  ['twNote','kkNote'].forEach(n => note(n,''));
+  $('#redirUrl').textContent = canRedirect() ? redirectUri() : 'Abre la página desde https:// o http://localhost';
+  note('fileNote', canRedirect() ? '' : 'Estás abriendo el archivo directo: los botones "Conectar" solo funcionan desde https:// o http://localhost. Mientras tanto puedes pegar un token manual.', 'info');
+  dlg.showModal();
+};
+$('#copyRedir').onclick = () => { if(canRedirect() && navigator.clipboard) navigator.clipboard.writeText(redirectUri()).catch(()=>{}); };
+$('#dlgClose').onclick = $('#dlgCancel').onclick = () => dlg.close();
+$('#dlgSave').onclick = () => {
+  const prevTw = cfg.twitchChannel, prevKk = cfg.kickChannel;
+  cfg.twitchChannel = $('#twChannel').value.trim() || DEF.twitchChannel;
+  cfg.twClient = $('#twClient').value.trim();
+  cfg.kickChannel = $('#kkChannel').value.trim() || DEF.kickChannel;
+  cfg.kickChatroom = $('#kkRoom').value.trim();
+  if(cfg.kickChannel !== prevKk && $('#kkRoom').value.trim() === '') cfg.kickChatroom = '';
+  cfg.kickClient = $('#kkClient').value.trim(); cfg.kickSecret = $('#kkSecret').value.trim();
+  cfg.kickBroadcaster = $('#kkBroadcaster').value.trim();
+  save(); refreshUI(); dlg.close();
+  $('#frames').innerHTML = '';
+  connectTwitch(); connectKick();
+};
+$('#twConnect').onclick = () => { cfg.twClient = $('#twClient').value.trim(); save(); twStartLogin(); };
+$('#twLogout').onclick = () => { cfg.twToken=''; cfg.twLogin=''; save(); refreshUI(); connectTwitch(); };
+$('#twTokenSave').onclick = async () => {
+  const t = $('#twToken').value.trim().replace(/^oauth:/i,''); if(!t) return;
+  try{ const v = await twValidate(t); cfg.twToken=t; cfg.twLogin=v.login; save(); refreshUI(); connectTwitch(); $('#twToken').value=''; }
+  catch(e){ note('twNote', e.message); }
+};
+$('#kkConnect').onclick = () => { cfg.kickClient=$('#kkClient').value.trim(); cfg.kickSecret=$('#kkSecret').value.trim(); save(); kickStartLogin(); };
+$('#kkLogout').onclick = () => { cfg.kickToken=''; cfg.kickLogin=''; cfg.kickBroadcaster=''; save(); refreshUI(); };
+$('#kkTokenSave').onclick = async () => {
+  const t = $('#kkToken').value.trim().replace(/^Bearer\s+/i,''); if(!t) return;
+  cfg.kickToken = t; cfg.kickBroadcaster = $('#kkBroadcaster').value.trim(); await kickFetchMe(); save(); refreshUI(); $('#kkToken').value='';
+};
+
+/* ---------- Inicio ---------- */
+refreshUI();
+sys('Multichat listo. Lectura anónima activa; conecta tus cuentas en ⚙ Ajustes para escribir.','info');
+handleOAuthReturn().finally(() => { connectTwitch(); connectKick(); });
+})();
+</script>
+</body>
+</html>
